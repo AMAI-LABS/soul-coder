@@ -1,0 +1,268 @@
+//! Bash tool — execute shell commands with output truncation and timeout.
+
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use serde_json::json;
+use tokio::sync::mpsc;
+
+use soul_core::error::SoulResult;
+use soul_core::tool::{Tool, ToolOutput};
+use soul_core::types::ToolDefinition;
+use soul_core::vexec::VirtualExecutor;
+
+use crate::truncate::{truncate_tail, MAX_BYTES};
+
+/// Maximum lines kept from bash output (tail).
+const BASH_MAX_LINES: usize = 50;
+
+/// Default command timeout in seconds.
+const DEFAULT_TIMEOUT: u64 = 120;
+
+pub struct BashTool {
+    executor: Arc<dyn VirtualExecutor>,
+    cwd: String,
+}
+
+impl BashTool {
+    pub fn new(executor: Arc<dyn VirtualExecutor>, cwd: impl Into<String>) -> Self {
+        Self {
+            executor,
+            cwd: cwd.into(),
+        }
+    }
+}
+
+/// Strip ANSI escape codes from output.
+fn strip_ansi(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\x1b' {
+            // Skip escape sequence
+            if let Some(&'[') = chars.peek() {
+                chars.next(); // consume '['
+                // Consume until a letter
+                while let Some(&c) = chars.peek() {
+                    chars.next();
+                    if c.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+        } else if ch == '\r' {
+            // Skip carriage returns
+        } else {
+            result.push(ch);
+        }
+    }
+
+    result
+}
+
+#[async_trait]
+impl Tool for BashTool {
+    fn name(&self) -> &str {
+        "bash"
+    }
+
+    fn definition(&self) -> ToolDefinition {
+        ToolDefinition {
+            name: "bash".into(),
+            description: "Execute a shell command. Returns stdout and stderr. Output is truncated to the last 50 lines.".into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The shell command to execute"
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Timeout in seconds (default: 120)"
+                    }
+                },
+                "required": ["command"]
+            }),
+        }
+    }
+
+    async fn execute(
+        &self,
+        _call_id: &str,
+        arguments: serde_json::Value,
+        partial_tx: Option<mpsc::UnboundedSender<String>>,
+    ) -> SoulResult<ToolOutput> {
+        let command = arguments
+            .get("command")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        if command.is_empty() {
+            return Ok(ToolOutput::error("Missing required parameter: command"));
+        }
+
+        let timeout = arguments
+            .get("timeout")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(DEFAULT_TIMEOUT);
+
+        let exec_result = self
+            .executor
+            .exec_shell(command, timeout, Some(&self.cwd))
+            .await;
+
+        match exec_result {
+            Ok(output) => {
+                // Stream partial output if channel available
+                if let Some(ref tx) = partial_tx {
+                    let _ = tx.send(output.stdout.clone());
+                }
+
+                // Combine stdout + stderr
+                let mut combined = strip_ansi(&output.stdout);
+                if !output.stderr.is_empty() {
+                    if !combined.is_empty() {
+                        combined.push('\n');
+                    }
+                    combined.push_str("[stderr]\n");
+                    combined.push_str(&strip_ansi(&output.stderr));
+                }
+
+                // Truncate from tail (errors/final output matter most)
+                let truncated = truncate_tail(&combined, BASH_MAX_LINES, MAX_BYTES);
+
+                let notice = truncated.truncation_notice();
+                let is_truncated = truncated.is_truncated();
+                let mut result = truncated.content;
+                if let Some(notice) = notice {
+                    result = format!("{}\n{}", notice, result);
+                }
+
+                if output.exit_code != 0 {
+                    result.push_str(&format!("\n[exit code: {}]", output.exit_code));
+                }
+
+                let tool_output = if output.success() {
+                    ToolOutput::success(result)
+                } else {
+                    ToolOutput::error(result)
+                };
+
+                Ok(tool_output.with_metadata(json!({
+                    "exit_code": output.exit_code,
+                    "truncated": is_truncated,
+                })))
+            }
+            Err(e) => Ok(ToolOutput::error(format!("Command failed: {}", e))),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use soul_core::vexec::{ExecOutput, MockExecutor};
+
+    fn setup_ok(stdout: &str) -> BashTool {
+        let executor = Arc::new(MockExecutor::always_ok(stdout));
+        BashTool::new(executor as Arc<dyn VirtualExecutor>, "/project")
+    }
+
+    fn setup_with(responses: Vec<ExecOutput>) -> BashTool {
+        let executor = Arc::new(MockExecutor::new(responses));
+        BashTool::new(executor as Arc<dyn VirtualExecutor>, "/project")
+    }
+
+    #[tokio::test]
+    async fn execute_simple_command() {
+        let tool = setup_ok("hello world\n");
+        let result = tool
+            .execute("c1", json!({"command": "echo hello world"}), None)
+            .await
+            .unwrap();
+
+        assert!(!result.is_error);
+        assert!(result.content.contains("hello world"));
+    }
+
+    #[tokio::test]
+    async fn execute_with_error_exit() {
+        let tool = setup_with(vec![ExecOutput {
+            stdout: String::new(),
+            stderr: "command not found".into(),
+            exit_code: 127,
+        }]);
+
+        let result = tool
+            .execute("c2", json!({"command": "nonexistent"}), None)
+            .await
+            .unwrap();
+
+        assert!(result.is_error);
+        assert!(result.content.contains("command not found"));
+        assert!(result.content.contains("exit code: 127"));
+    }
+
+    #[tokio::test]
+    async fn execute_empty_command() {
+        let tool = setup_ok("");
+        let result = tool
+            .execute("c3", json!({"command": ""}), None)
+            .await
+            .unwrap();
+        assert!(result.is_error);
+        assert!(result.content.contains("Missing"));
+    }
+
+    #[tokio::test]
+    async fn strips_ansi() {
+        assert_eq!(strip_ansi("\x1b[31mred\x1b[0m"), "red");
+        assert_eq!(strip_ansi("no ansi"), "no ansi");
+        assert_eq!(strip_ansi("line\r\n"), "line\n");
+    }
+
+    #[tokio::test]
+    async fn stderr_included() {
+        let tool = setup_with(vec![ExecOutput {
+            stdout: "out\n".into(),
+            stderr: "warn\n".into(),
+            exit_code: 0,
+        }]);
+
+        let result = tool
+            .execute("c4", json!({"command": "test"}), None)
+            .await
+            .unwrap();
+
+        assert!(!result.is_error);
+        assert!(result.content.contains("out"));
+        assert!(result.content.contains("[stderr]"));
+        assert!(result.content.contains("warn"));
+    }
+
+    #[tokio::test]
+    async fn streaming_output() {
+        let tool = setup_ok("streamed\n");
+        let (tx, mut rx) = mpsc::unbounded_channel();
+
+        let result = tool
+            .execute("c5", json!({"command": "echo streamed"}), Some(tx))
+            .await
+            .unwrap();
+
+        assert!(!result.is_error);
+        let partial = rx.recv().await.unwrap();
+        assert_eq!(partial, "streamed\n");
+    }
+
+    #[tokio::test]
+    async fn tool_name_and_definition() {
+        let tool = setup_ok("");
+        assert_eq!(tool.name(), "bash");
+        let def = tool.definition();
+        assert_eq!(def.name, "bash");
+        assert!(def.input_schema["required"].as_array().unwrap().contains(&json!("command")));
+    }
+}
