@@ -86,7 +86,8 @@ fn strip_ansi(input: &str) -> String {
     result
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl Tool for BashTool {
     fn name(&self) -> &str {
         "bash"

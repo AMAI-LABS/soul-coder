@@ -71,7 +71,8 @@ fn unified_diff(old: &str, new: &str, path: &str) -> String {
     output
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl Tool for EditTool {
     fn name(&self) -> &str {
         "edit"

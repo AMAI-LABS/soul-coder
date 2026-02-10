@@ -105,7 +105,8 @@ fn matches_glob(filename: &str, glob: &str) -> bool {
     }
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl Tool for GrepTool {
     fn name(&self) -> &str {
         "grep"
