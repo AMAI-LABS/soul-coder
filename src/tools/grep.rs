@@ -19,6 +19,8 @@ use crate::truncate::{truncate_head, truncate_line, GREP_MAX_LINE_LENGTH, MAX_BY
 /// Maximum number of matches returned.
 const MAX_MATCHES: usize = 100;
 
+use super::resolve_path;
+
 pub struct GrepTool {
     fs: Arc<dyn VirtualFs>,
     cwd: String,
@@ -29,14 +31,6 @@ impl GrepTool {
         Self {
             fs,
             cwd: cwd.into(),
-        }
-    }
-
-    fn resolve_path(&self, path: &str) -> String {
-        if path.starts_with('/') {
-            path.to_string()
-        } else {
-            format!("{}/{}", self.cwd.trim_end_matches('/'), path)
         }
     }
 }
@@ -176,7 +170,7 @@ impl Tool for GrepTool {
         let search_path = arguments
             .get("path")
             .and_then(|v| v.as_str())
-            .map(|p| self.resolve_path(p))
+            .map(|p| resolve_path(&self.cwd, p))
             .unwrap_or_else(|| self.cwd.clone());
 
         let glob_filter = arguments.get("glob").and_then(|v| v.as_str());

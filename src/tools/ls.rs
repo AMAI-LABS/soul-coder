@@ -14,6 +14,8 @@ use soul_core::vfs::VirtualFs;
 /// Maximum entries returned.
 const MAX_ENTRIES: usize = 500;
 
+use super::resolve_path;
+
 pub struct LsTool {
     fs: Arc<dyn VirtualFs>,
     cwd: String,
@@ -24,14 +26,6 @@ impl LsTool {
         Self {
             fs,
             cwd: cwd.into(),
-        }
-    }
-
-    fn resolve_path(&self, path: &str) -> String {
-        if path.starts_with('/') {
-            path.to_string()
-        } else {
-            format!("{}/{}", self.cwd.trim_end_matches('/'), path)
         }
     }
 }
@@ -76,7 +70,7 @@ impl Tool for LsTool {
         let resolved = if path.is_empty() {
             self.cwd.clone()
         } else {
-            self.resolve_path(path)
+            resolve_path(&self.cwd, path)
         };
 
         let limit = arguments

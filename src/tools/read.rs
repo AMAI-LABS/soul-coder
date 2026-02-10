@@ -13,6 +13,8 @@ use soul_core::vfs::VirtualFs;
 
 use crate::truncate::{add_line_numbers, truncate_head, MAX_BYTES, MAX_LINES};
 
+use super::resolve_path;
+
 pub struct ReadTool {
     fs: Arc<dyn VirtualFs>,
     cwd: String,
@@ -23,14 +25,6 @@ impl ReadTool {
         Self {
             fs,
             cwd: cwd.into(),
-        }
-    }
-
-    fn resolve_path(&self, path: &str) -> String {
-        if path.starts_with('/') {
-            path.to_string()
-        } else {
-            format!("{}/{}", self.cwd.trim_end_matches('/'), path)
         }
     }
 }
@@ -81,7 +75,7 @@ impl Tool for ReadTool {
             return Ok(ToolOutput::error("Missing required parameter: path"));
         }
 
-        let resolved = self.resolve_path(path);
+        let resolved = resolve_path(&self.cwd, path);
 
         let exists = self.fs.exists(&resolved).await?;
         if !exists {

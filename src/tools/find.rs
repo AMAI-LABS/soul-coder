@@ -19,6 +19,8 @@ use crate::truncate::{truncate_head, MAX_BYTES};
 /// Maximum results returned.
 const MAX_RESULTS: usize = 1000;
 
+use super::resolve_path;
+
 pub struct FindTool {
     fs: Arc<dyn VirtualFs>,
     cwd: String,
@@ -29,14 +31,6 @@ impl FindTool {
         Self {
             fs,
             cwd: cwd.into(),
-        }
-    }
-
-    fn resolve_path(&self, path: &str) -> String {
-        if path.starts_with('/') {
-            path.to_string()
-        } else {
-            format!("{}/{}", self.cwd.trim_end_matches('/'), path)
         }
     }
 }
@@ -203,7 +197,7 @@ impl Tool for FindTool {
         let search_path = arguments
             .get("path")
             .and_then(|v| v.as_str())
-            .map(|p| self.resolve_path(p))
+            .map(|p| resolve_path(&self.cwd, p))
             .unwrap_or_else(|| self.cwd.clone());
 
         let limit = arguments

@@ -12,6 +12,8 @@ use soul_core::tool::{Tool, ToolOutput};
 use soul_core::types::ToolDefinition;
 use soul_core::vfs::VirtualFs;
 
+use super::resolve_path;
+
 pub struct EditTool {
     fs: Arc<dyn VirtualFs>,
     cwd: String,
@@ -22,14 +24,6 @@ impl EditTool {
         Self {
             fs,
             cwd: cwd.into(),
-        }
-    }
-
-    fn resolve_path(&self, path: &str) -> String {
-        if path.starts_with('/') {
-            path.to_string()
-        } else {
-            format!("{}/{}", self.cwd.trim_end_matches('/'), path)
         }
     }
 }
@@ -139,7 +133,7 @@ impl Tool for EditTool {
             ));
         }
 
-        let resolved = self.resolve_path(path);
+        let resolved = resolve_path(&self.cwd, path);
 
         let exists = self.fs.exists(&resolved).await?;
         if !exists {

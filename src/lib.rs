@@ -31,6 +31,22 @@
 //! | `read_only_tools` | read, grep, find, ls | Codebase exploration |
 //! | `all_tools` | all 7 tools | Full agent capabilities |
 //!
+//! ## ExecutorRegistry Integration
+//!
+//! For integration with soul-core's config-driven executor system:
+//!
+//! ```rust
+//! use std::sync::Arc;
+//! use soul_core::vfs::MemoryFs;
+//! use soul_core::vexec::NoopExecutor;
+//!
+//! let fs = Arc::new(MemoryFs::new());
+//! let exec = Arc::new(NoopExecutor);
+//! let registry = soul_coder::presets::all_executor(fs, exec, "/workspace");
+//!
+//! assert!(registry.has_tool("read"));
+//! ```
+//!
 //! ## Individual Tools
 //!
 //! Each tool can be instantiated independently:
@@ -49,7 +65,9 @@ pub mod tools;
 pub mod truncate;
 
 // Re-export key types for convenience
-pub use presets::{all_tools, coding_tools, read_only_tools};
+pub use presets::{
+    all_executor, all_tools, coding_executor, coding_tools, read_only_tools, wrap_as_executor,
+};
 pub use tools::{
     bash::BashTool,
     edit::EditTool,

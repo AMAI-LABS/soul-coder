@@ -11,6 +11,8 @@ use soul_core::tool::{Tool, ToolOutput};
 use soul_core::types::ToolDefinition;
 use soul_core::vfs::VirtualFs;
 
+use super::resolve_path;
+
 pub struct WriteTool {
     fs: Arc<dyn VirtualFs>,
     cwd: String,
@@ -21,14 +23,6 @@ impl WriteTool {
         Self {
             fs,
             cwd: cwd.into(),
-        }
-    }
-
-    fn resolve_path(&self, path: &str) -> String {
-        if path.starts_with('/') {
-            path.to_string()
-        } else {
-            format!("{}/{}", self.cwd.trim_end_matches('/'), path)
         }
     }
 }
@@ -79,7 +73,7 @@ impl Tool for WriteTool {
             return Ok(ToolOutput::error("Missing required parameter: path"));
         }
 
-        let resolved = self.resolve_path(path);
+        let resolved = resolve_path(&self.cwd, path);
 
         // Auto-create parent directories
         if let Some(parent) = resolved.rsplit_once('/') {

@@ -1,6 +1,6 @@
 [package]
 name = "soul-coder"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["AMAI Labs <dev@amai.net>"]
 description = "Coding-specific tools for soul-core — read, write, edit, bash, grep, find, ls. WASM-first, cross-platform."
