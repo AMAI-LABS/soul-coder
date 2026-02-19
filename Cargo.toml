@@ -1,0 +1,31 @@
+[package]
+name = "soul-coder"
+version = "0.5.1"
+edition = "2021"
+authors = ["AMAI Labs <team@amai.net>"]
+description = "Coding-specific tools for soul-core — read, write, edit, bash, grep, find, ls. WASM-first, cross-platform."
+license = "MIT"
+repository = "https://github.com/AMAI-LABS/soul-coder"
+homepage = "https://github.com/AMAI-LABS/soul-coder"
+keywords = ["ai", "agent", "coding", "tools", "wasm"]
+categories = ["development-tools", "wasm", "command-line-utilities"]
+rust-version = "1.75"
+
+[features]
+default = ["native"]
+native = ["soul-core/native", "tokio/process", "tokio/fs", "tokio/io-util"]
+wasm = ["soul-core/wasm"]
+
+[dependencies]
+soul-core = { version = "0.11.1", path = "../soul-core", default-features = false }
+tokio = { version = "1", features = ["sync", "macros", "rt"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+async-trait = "0.1"
+thiserror = "2"
+sha2 = "0.10"
+similar = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }
+tempfile = "3"
