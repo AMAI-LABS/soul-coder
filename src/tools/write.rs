@@ -61,6 +61,14 @@ impl Tool for WriteTool {
         arguments: serde_json::Value,
         _partial_tx: Option<mpsc::UnboundedSender<String>>,
     ) -> SoulResult<ToolOutput> {
+        // If the provider passed args as a JSON string instead of an object
+        // (can happen with large payloads on streaming providers), unwrap it.
+        let arguments = if let Some(s) = arguments.as_str() {
+            serde_json::from_str(s).unwrap_or(arguments)
+        } else {
+            arguments
+        };
+
         let path = arguments
             .get("path")
             .and_then(|v| v.as_str())
@@ -196,5 +204,22 @@ mod tests {
         assert_eq!(tool.name(), "write");
         let def = tool.definition();
         assert_eq!(def.name, "write");
+    }
+
+    /// When streaming providers return args as a JSON-escaped string instead of
+    /// an object, the write tool should unwrap and use it correctly.
+    #[tokio::test]
+    async fn write_string_encoded_args() {
+        let (fs, tool) = setup().await;
+        // Simulate: model emits args as a JSON string instead of an object
+        let args_as_string = r#"{"path": "encoded.txt", "content": "hello from string args"}"#;
+        let result = tool
+            .execute("c6", serde_json::Value::String(args_as_string.to_string()), None)
+            .await
+            .unwrap();
+
+        assert!(!result.is_error, "should succeed: {}", result.content);
+        let content = fs.read_to_string("/project/encoded.txt").await.unwrap();
+        assert_eq!(content, "hello from string args");
     }
 }
