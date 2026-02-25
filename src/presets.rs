@@ -13,8 +13,8 @@ use soul_core::vexec::VirtualExecutor;
 use soul_core::vfs::VirtualFs;
 
 use crate::tools::{
-    bash::BashTool, edit::EditTool, find::FindTool, grep::GrepTool, ls::LsTool, read::ReadTool,
-    write::WriteTool,
+    append::AppendTool, bash::BashTool, edit::EditTool, find::FindTool, grep::GrepTool,
+    ls::LsTool, read::ReadTool, write::WriteTool,
 };
 
 /// Create coding tools: read, write, edit, bash.
@@ -48,7 +48,7 @@ pub fn read_only_tools(
     registry
 }
 
-/// Create all tools: read, write, edit, bash, grep, find, ls.
+/// Create all tools: read, write, append, edit, bash, grep, find, ls.
 /// Complete toolkit for full agent capabilities.
 pub fn all_tools(
     fs: Arc<dyn VirtualFs>,
@@ -59,6 +59,7 @@ pub fn all_tools(
     let mut registry = ToolRegistry::new();
     registry.register(Box::new(ReadTool::new(fs.clone(), &cwd)));
     registry.register(Box::new(WriteTool::new(fs.clone(), &cwd)));
+    registry.register(Box::new(AppendTool::new(fs.clone(), &cwd)));
     registry.register(Box::new(EditTool::new(fs.clone(), &cwd)));
     registry.register(Box::new(BashTool::new(executor, &cwd)));
     registry.register(Box::new(GrepTool::new(fs.clone(), &cwd)));
@@ -154,14 +155,15 @@ mod tests {
     }
 
     #[test]
-    fn all_tools_has_seven() {
+    fn all_tools_has_eight() {
         let fs = Arc::new(MemoryFs::new());
         let exec = Arc::new(NoopExecutor);
         let registry = all_tools(fs, exec, "/");
-        assert_eq!(registry.len(), 7);
+        assert_eq!(registry.len(), 8);
         let names = registry.names();
         assert!(names.contains(&"read"));
         assert!(names.contains(&"write"));
+        assert!(names.contains(&"append"));
         assert!(names.contains(&"edit"));
         assert!(names.contains(&"bash"));
         assert!(names.contains(&"grep"));
@@ -188,12 +190,13 @@ mod tests {
         let registry = all_executor(fs, exec, "/");
         assert!(registry.has_tool("read"));
         assert!(registry.has_tool("write"));
+        assert!(registry.has_tool("append"));
         assert!(registry.has_tool("edit"));
         assert!(registry.has_tool("bash"));
         assert!(registry.has_tool("grep"));
         assert!(registry.has_tool("find"));
         assert!(registry.has_tool("ls"));
-        assert_eq!(registry.definitions().len(), 7);
+        assert_eq!(registry.definitions().len(), 8);
     }
 
     #[test]

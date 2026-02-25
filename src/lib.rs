@@ -1,7 +1,7 @@
 //! # soul-coder
 //!
 //! Coding-specific tools for [soul-core](https://crates.io/crates/soul-core) —
-//! read, write, edit, bash, grep, find, ls.
+//! read, write, append, edit, bash, grep, find, ls.
 //!
 //! WASM-first, cross-platform. All tools use `soul_core::vfs::VirtualFs` and
 //! `soul_core::vexec::VirtualExecutor` for platform abstraction, enabling
@@ -15,12 +15,12 @@
 //! use soul_core::vexec::NoopExecutor;
 //! use soul_coder::presets;
 //!
-//! // Create all 7 coding tools with in-memory VFS (WASM-ready)
+//! // Create all 8 coding tools with in-memory VFS (WASM-ready)
 //! let fs = Arc::new(MemoryFs::new());
 //! let exec = Arc::new(NoopExecutor);
 //! let registry = presets::all_tools(fs, exec, "/workspace");
 //!
-//! assert_eq!(registry.len(), 7);
+//! assert_eq!(registry.len(), 8);
 //! ```
 //!
 //! ## Tool Presets
@@ -69,6 +69,7 @@ pub use presets::{
     all_executor, all_tools, coding_executor, coding_tools, read_only_tools, wrap_as_executor,
 };
 pub use tools::{
+    append::AppendTool,
     bash::BashTool,
     edit::EditTool,
     find::FindTool,
